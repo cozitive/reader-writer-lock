@@ -1,4 +1,4 @@
-#define SYSCALL_SET_ORIENTATION 399
+#define SYSCALL_SET_ORIENTATION 294
 
 #include <signal.h>
 #include <sys/syscall.h>
