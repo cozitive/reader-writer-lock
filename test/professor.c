@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "common.h"
 
 int main(int argc, char *argv[]) {
     int starting_integer = 0;

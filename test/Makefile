@@ -1,6 +1,7 @@
 CC=aarch64-linux-gnu-gcc
 CFLAGS=-static
 TARGETS=professor student
+TESTS=
 
 all: $(TARGETS)
 
@@ -8,4 +9,4 @@ all: $(TARGETS)
 	$(CC) $(CFLAGS) -o $@ $<
 
 clean:
-	rm -f $(TARGETS) *.o
+	rm -f $(TARGETS) $(TESTS)
