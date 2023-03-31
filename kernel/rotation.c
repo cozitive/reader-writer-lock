@@ -2,6 +2,7 @@
 #include <linux/kernel.h>
 #include <linux/syscalls.h>
 #include <linux/mutex.h>
+#include <linux/errno.h>
 
 /*
  * Readers and writers.
@@ -10,6 +11,9 @@
 #define ROT_READ 0
 #define ROT_WRITE 1
 
+static int device_orientation = 0;
+static DEFINE_MUTEX(orientation_lock);
+
 /// @brief Set the current device orientation.
 /// @param degree The degree to set as the current device orientation. Value must be in the range 0 <= degree < 360.
 /// @return Zero on success, -EINVAL on invalid argument.
@@ -17,6 +21,12 @@ SYSCALL_DEFINE1(set_orientation, int, degree)
 {
 	if (degree < 0 || degree >= 360)
 		return -EINVAL;
+
+	mutex_lock(&orientation_lock);
+	device_orientation = degree;
+	mutex_unlock(&orientation_lock);
+
+	return 0;
 }
 
 /// @brief Claim read or write access in the specified degree range.
