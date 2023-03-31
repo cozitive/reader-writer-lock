@@ -1294,3 +1294,7 @@ static inline unsigned int ksys_personality(unsigned int personality)
 }
 
 #endif
+
+asmlinkage long sys_set_orientation(int degree);
+asmlinkage long sys_rotation_lock(int low, int high, int type);
+asmlinkage long sys_rotation_unlock(long id);
