@@ -10,6 +10,15 @@
 #define ROT_READ 0
 #define ROT_WRITE 1
 
+/// @brief Set the current device orientation.
+/// @param degree The degree to set as the current device orientation. Value must be in the range 0 <= degree < 360.
+/// @return Zero on success, -EINVAL on invalid argument.
+SYSCALL_DEFINE1(set_orientation, int, degree)
+{
+	if (degree < 0 || degree >= 360)
+		return -EINVAL;
+}
+
 /// @brief Claim read or write access in the specified degree range.
 /// @param low The beginning of the degree range (inclusive). Value must be in the range 0 <= low < 360.
 /// @param high The end of the degree range (inclusive). Value must be in the range 0 <= high < 360.

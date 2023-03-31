@@ -11,7 +11,7 @@ obj-y     = fork.o exec_domain.o panic.o \
 	    kthread.o sys_ni.o nsproxy.o \
 	    notifier.o ksysfs.o cred.o reboot.o \
 	    async.o range.o smpboot.o ucount.o \
-		set_orientation.o rotation.o
+		rotation.o
 
 obj-$(CONFIG_MODULES) += kmod.o
 obj-$(CONFIG_MULTIUSER) += groups.o
