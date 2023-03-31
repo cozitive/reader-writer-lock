@@ -3,10 +3,19 @@
 BASEDIR=$(dirname "$0")
 cd $BASEDIR
 
+# Usage: ./compile-mount-and-copy.sh file1 file2 ...
+# If no arguments are given, fallback is professor and student
+if [ $# -eq 0 ]; then
+    files=("professor" "student")
+else
+    files=("$@")
+fi
+
 make clean
-make
+make "${files[@]}"
 mkdir ./mntdir
 sudo mount ../tizen-image/rootfs.img ./mntdir
-sudo cp professor student ./mntdir/root
+sudo cp "${files[@]}" ./mntdir/root
+
 sudo umount ./mntdir
 rmdir ./mntdir
