@@ -159,7 +159,7 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	kfree(lock);
 
 	/* Wake up all processes waiting for the lock */
-	wake_up_all(requests); // TODO: requests 없애버렸으니 고쳐야 함.
+	wake_up_all(requests);
 
 	return 0;
 }
