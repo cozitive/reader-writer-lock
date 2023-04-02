@@ -25,11 +25,15 @@ SYSCALL_DEFINE1(set_orientation, int, degree)
 static LIST_HEAD(locks); // List of currently held locks
 static DEFINE_MUTEX(locks_lock); // Mutex to protect `locks`
 
-static LIST_HEAD(requests); // List of pending requests
-static DEFINE_MUTEX(requests_lock); // Mutex to protect `requests`
+/* degree_to_locks: 효율성을 위해서 도입했으나 일단 지금은 신경쓰기 귀찮으므로, 1차로 구현 끝내고 나서 다시 넣기 */
+// static struct list_head degree_to_locks[360]; // List of locks for each degree
+// for (int i = 0; i < 360; i++) INIT_LIST_HEAD(&degree_to_locks[i]);
+// static DEFINE_MUTEX(degree_to_locks_lock); // Mutex to protect `degree_to_locks`
+
+static wait_queue_head_t requests; // Wait queue for blocking requests
+init_waitqueue_head(&requests);
 
 static long next_lock_id = 0; // The next lock ID to use
-
 
 /// @brief Add a request to the list of requests.
 /// @param[in] request The request to add.
@@ -56,6 +60,17 @@ struct list_head *filter_requests(int degree, int lock_type);
 /// @return The lock, or NULL if not found.
 struct rotation_lock *find_lock(long id);
 
+/// @brief Check if current device orientation is in the specified degree range.
+/// @param low
+/// @param high
+/// @return 1 if yes, 0 if no.
+int orientation_in_range(int low, int high);
+
+/// @brief Check if a lock is available.
+/// @param request The request to check.
+/// @return 1 if yes, 0 if no.
+int lock_available(struct access_request *request)
+
 /// @brief Claim read or write access in the specified degree range.
 /// @param low The beginning of the degree range (inclusive). Value must be in the range 0 <= low < 360.
 /// @param high The end of the degree range (inclusive). Value must be in the range 0 <= high < 360.
@@ -63,10 +78,14 @@ struct rotation_lock *find_lock(long id);
 /// @return On success, returns a non-negative lock ID that is unique for each call to rotation_lock. On invalid argument, returns -EINVAL.
 SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 {
-	if (low < 0 || low >= 360 || high < 0 || high >= 360 || (type != ROT_READ && type != ROT_WRITE))
+	if (low < 0 || low >= 360 || high < 0 || high >= 360 ||
+	    (type != ROT_READ && type != ROT_WRITE))
 		return -EINVAL;
 
-	struct access_request *request = kmalloc(sizeof(struct access_request), GFP_KERNEL);
+	long id = 0; // The ID of the lock (return value)
+
+	struct access_request *request =
+		kmalloc(sizeof(struct access_request), GFP_KERNEL);
 	if (request == NULL)
 		return -ENOMEM;
 
@@ -75,10 +94,20 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	request->high = high;
 	request->lock_type = type;
 
-	long id = 0;
+	init_waitqueue_entry(&request->wait_entry, current);
 
-	// 여기서는 지금 "너한테 줄수 있느냐?"만 따짐
+	add_wait_queue(&requests, &request->wait_entry);
+	while (!lock_available(request)) {
+		prepare_to_wait(&requests, &request->wait_entry, TASK_INTERRUPTIBLE);
+		schedule();
+	}
+	// Be careful for races!!!!!!! (나중에 다시 확인)
+	// 여러 프로세스들이 기다리던 중에 동시에 lock_available이 되었을때 동시에 여기로 빠져나올수 있지만 실제로는 한 프로세스에게만 락을 줘야함.
+	finish_wait(&requests, &request->wait_entry);
 
+
+	/* Give lock to the process */
+	// TODO
 }
 
 /// @brief Revoke access claimed by a call to rotation_lock.
@@ -105,7 +134,19 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	list_del(&lock->list);
 	mutex_unlock(&locks_lock);
 
-	// 제거하고나서, wait queue에 있는 남은 애들 중에서 들어갈수 있는 애가 있는지 확인하고, 있으면 걔한테 줌
+	return 0;
+}
 
+int orientation_in_range(int low, int high)
+{
+	if (low <= high)
+		return device_orientation >= low && device_orientation <= high;
+	else
+		return device_orientation >= low || device_orientation <= high;
+}
+
+int lock_available(struct access_request *request)
+{
+	// TODO
 	return 0;
 }

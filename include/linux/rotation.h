@@ -1,4 +1,5 @@
 #include <linux/list.h>
+#include <linux/wait.h>
 
 /*
  * Readers and writers.
@@ -12,7 +13,7 @@ struct access_request {
 	int low; // low degree of range
 	int high; // high degree of range
 	int lock_type; // ROT_READ or ROT_WRITE
-	struct list_head list;
+	wait_queue_entry_t wait_entry;
 };
 
 struct rotation_lock {
@@ -23,3 +24,9 @@ struct rotation_lock {
     int lock_type; // ROT_READ or ROT_WRITE
     struct list_head list;
 };
+
+/* degree_to_locks: 효율성을 위해서 도입했으나 일단 지금은 신경쓰기 귀찮으므로, 1차로 구현 끝내고 나서 다시 넣기 */
+// struct degree_to_locks_entry {
+//     struct rotation_lock *lock;
+//     struct list_head list;
+// };
