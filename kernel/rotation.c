@@ -75,7 +75,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 
 	DEFINE_WAIT(wait);
 	add_wait_queue(requests, &wait);
-	int writer_waiting = 0; // Variable to keep track of whether `waiting_writers` is containing current process
+	int writer_waiting = 0; // Flag to keep track of whether `waiting_writers` is containing current process
 
 	mutex_lock(&orientation_lock);
 	mutex_lock(&locks_lock);
@@ -134,7 +134,7 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	if (id < 0)
 		return -EINVAL;
 
-	struct lock_info *lock = find_lock(id);
+	struct lock_info *lock = find_lock(id); // TODO: find_lock() 구현
 
 	/* No such lock, return -EINVAL */
 	if (lock == NULL)
@@ -159,7 +159,7 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	kfree(lock);
 
 	/* Wake up all processes waiting for the lock */
-	wake_up_all(requests);
+	wake_up_all(requests); // TODO: requests 없애버렸으니 고쳐야 함.
 
 	return 0;
 }
