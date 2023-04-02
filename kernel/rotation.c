@@ -25,10 +25,6 @@ SYSCALL_DEFINE1(set_orientation, int, degree)
 static LIST_HEAD(locks); // List of currently held locks
 static DEFINE_MUTEX(locks_lock); // Mutex to protect `locks`
 
-static long deg_to_lock_id[360]; // Maps degrees to lock IDs
-memset(deg_to_lock_id, -1, sizeof(long)); // Initialize all entries to -1
-static DEFINE_MUTEX(deg_to_lock_id_lock); // Mutex to protect `deg_to_lock_id`
-
 static LIST_HEAD(requests); // List of pending requests
 static DEFINE_MUTEX(requests_lock); // Mutex to protect `requests`
 
@@ -104,14 +100,10 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	if (lock->pid != current->pid)
 		return -EPERM;
 
+	/* Delete the lock from list */
 	mutex_lock(&locks_lock);
 	list_del(&lock->list);
 	mutex_unlock(&locks_lock);
-
-	mutex_lock(&deg_to_lock_id_lock);
-	for (int i = lock->low; i <= lock->high; i++)
-		deg_to_lock_id[i] = -1;
-	mutex_unlock(&deg_to_lock_id_lock);
 
 	// 제거하고나서, wait queue에 있는 남은 애들 중에서 들어갈수 있는 애가 있는지 확인하고, 있으면 걔한테 줌
 
