@@ -179,16 +179,13 @@ int lock_available(int low, int high, int type)
 
 	if (type == ROT_READ) {
 		/* Reader */
-
-		int flag = 1; // Whether the lock is available
 		for (int i = low; i <= high; i++) {
 			if (locks[i].active_writers > 0 ||
 			    locks[i].waiting_writers > 0) {
-				flag = 0;
-				break;
+				return 0;
 			}
 		}
-		return flag;
+		return 1;
 	} else {
 		/* Writer */
 
@@ -196,11 +193,10 @@ int lock_available(int low, int high, int type)
 		for (int i = low; i <= high; i++) {
 			if (locks[i].active_readers > 0 ||
 			    locks[i].active_writers > 0) {
-				flag = 0;
-				break;
+				return 0;
 			}
 		}
-		return flag;
+		return 1;
 	}
 }
 
