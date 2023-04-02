@@ -18,5 +18,4 @@ struct reader_writer_lock {
     int active_readers; // Number of active readers
     int active_writers; // Number of active writers
     int waiting_writers; // Number of waiting writers
-    // TODO: Information structs about other waiting readers and writers
 };
