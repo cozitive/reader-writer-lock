@@ -9,7 +9,7 @@ struct lock_info {
     int low; // The beginning of degree range
     int high; // The end of degree range
     int type; // ROT_READ or ROT_WRITE
-    struct list_head node; // Pointer to list node
+    struct list_head list; // Pointer to list node
 };
 
 struct reader_writer_lock {

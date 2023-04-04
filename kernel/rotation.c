@@ -12,9 +12,9 @@
 static int device_orientation = 0;
 static DEFINE_MUTEX(orientation_mutex);
 
-static LIST_HEAD(holding_locks); // Information of currently held locks
+static LIST_HEAD(locks_info); // Information of currently held locks
 static struct reader_writer_lock locks[MAX_DEGREE]; // Numbers of readers/writers for each degree
-static DEFINE_MUTEX(locks_mutex); // Mutex to protect `holding_locks` and `locks`
+static DEFINE_MUTEX(locks_mutex); // Mutex to protect `locks_info` and `locks`
 static int locks_initialized = 0; // Whether the locks have been initialized
 
 static DECLARE_WAIT_QUEUE_HEAD(requests); // Queue of requests
@@ -67,7 +67,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	int is_loop_visited = 0;
 
 	/* Return -EINVAL if arguments are invalid */
-	if ((low < 0 || low >= MAX_DEGREE || high < 0 || high >= MAX_DEGREE) || (type != ROT_READ && type != ROT_WRITE)) {
+	if (low < 0 || low >= MAX_DEGREE || high < 0 || high >= MAX_DEGREE ||
+	    (type != ROT_READ && type != ROT_WRITE)) {
 		return -EINVAL;
 	}
 
@@ -87,7 +88,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	/* Add current task to wait queue */
 	DEFINE_WAIT(wait);
 	add_wait_queue(&requests, &wait);
-	int is_current_in_waiting_writers = 0;
+	int writer_waiting = 0; // Flag to keep track of whether `waiting_writers` is containing current process
 
 	/* Wait until the access meets readers-writer lock condition */
 	mutex_lock(&orientation_mutex);
@@ -100,7 +101,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 		prepare_to_wait(&requests, &wait, TASK_INTERRUPTIBLE);
 
 		/* Increment the waiting_writers count */
-		if (type == ROT_WRITE && !is_current_in_waiting_writers) {
+		if (type == ROT_WRITE && !writer_waiting) {
 			mutex_lock(&locks_mutex);
 			for (i = low; i <= high; i++) {
 				if (i == MAX_DEGREE) {
@@ -109,33 +110,35 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 				locks[i].waiting_writers++;
 			}
 			mutex_unlock(&locks_mutex);
-			is_current_in_waiting_writers = 1;
+			writer_waiting = 1;
 		}
 
 		schedule(); // Go to sleep
 	}
 
-	/* Delete current task in wait queue */
-	finish_wait(&requests, &wait);
 	if (is_loop_visited) {
 		mutex_unlock(&locks_mutex);
 		mutex_unlock(&orientation_mutex);
 	}
 
+	/* Delete current task in wait queue */
+	finish_wait(&requests, &wait);
+
+
 	mutex_lock(&locks_mutex);
 
 	/* Add the lock info to holding lock list */
-	list_add(&lock->node, &holding_locks);
+	list_add(&lock->list, &locks_info);
 	
 	/* Decrement the waiting_writers count */
-	if (is_current_in_waiting_writers) {
+	if (writer_waiting) {
 		for (i = low; i <= high; i++) {
 			if (i == MAX_DEGREE) {
 				i = 0;
 			}
 			locks[i].waiting_writers--;
 		}
-		is_current_in_waiting_writers = 0;
+		writer_waiting = 0;
 	}
 
 	/* Increment the active_readers or active_writers count */
@@ -185,7 +188,7 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	}
 
 	/* Delete the lock from holding lock list */
-	list_del(&lock->node);
+	list_del(&lock->list);
 	for (i = lock->low; i <= lock->high; i++) {
 		if (i == MAX_DEGREE) {
 			i = 0;
@@ -207,10 +210,9 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	return 0;
 }
 
-void locks_init()
+void locks_init(void)
 {
 	int i;
-
 	if (locks_initialized) {
 		return;
 	}
@@ -246,28 +248,31 @@ int lock_available(int low, int high, int type)
 			if (i == MAX_DEGREE) {
 				i = 0;
 			}
-			if (locks[i].active_writers > 0 || locks[i].waiting_writers > 0) {
+			if (locks[i].active_writers > 0 ||
+				locks[i].waiting_writers > 0) {
 				return 0;
 			}
 		}
+		return 1;
 	} else {
 		/* Writer */
 		for (i = low; i <= high; i++) {
 			if (i == MAX_DEGREE) {
 				i = 0;
 			}
-			if (locks[i].active_readers > 0 || locks[i].active_writers > 0) {
+			if (locks[i].active_readers > 0 ||
+				locks[i].active_writers > 0) {
 				return 0;
 			}
 		}
+		return 1;
 	}
-	return 1;
 }
 
 struct lock_info *find_lock(long id)
 {
 	struct lock_info *lock;
-	list_for_each_entry(lock, &holding_locks, node) {
+	list_for_each_entry(lock, &locks_info, list) {
 		if (lock->id == id) {
 			return lock;
 		}
