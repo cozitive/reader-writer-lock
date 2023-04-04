@@ -95,7 +95,6 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	while (!lock_available(low, high, type)) {
 		mutex_unlock(&orientation_mutex);
 		mutex_unlock(&locks_mutex);
-
 		prepare_to_wait(&requests, &wait, TASK_INTERRUPTIBLE);
 
 		/* Increment the waiting_writers count */
@@ -111,18 +110,13 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 			mutex_unlock(&locks_mutex);
 		}
 		schedule(); // Go to sleep
-
-		mutex_lock(&orientation_mutex);
 		mutex_lock(&locks_mutex);
+		mutex_lock(&orientation_mutex);
 	}
-
-	mutex_unlock(&orientation_mutex);
-	mutex_unlock(&locks_mutex);
 
 	/* Delete current task in wait queue */
 	finish_wait(&requests, &wait);
-
-	mutex_lock(&locks_mutex);
+	mutex_unlock(&orientation_mutex);
 
 	/* Add the lock info to holding lock list */
 	list_add(&lock->list, &locks_info);
