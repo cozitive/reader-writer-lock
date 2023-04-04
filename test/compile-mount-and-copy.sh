@@ -4,9 +4,9 @@ BASEDIR=$(dirname "$0")
 cd $BASEDIR
 
 # Usage: ./compile-mount-and-copy.sh file1 file2 ...
-# If no arguments are given, fallback is professor and student
+# If no arguments are given, fallback is rotd, professor and student
 if [ $# -eq 0 ]; then
-    files=("professor" "student")
+    files=("rotd" "professor" "student")
 else
     files=("$@")
 fi
