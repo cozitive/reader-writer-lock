@@ -8,6 +8,8 @@
 #include <linux/sched.h>
 
 #define MAX_DEGREE 360
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 static int device_orientation = 0;
 static DEFINE_MUTEX(orientation_mutex);
@@ -42,7 +44,8 @@ struct lock_info *find_lock(long id);
 /// @brief Set the current device orientation.
 /// @param degree The degree to set as the current device orientation. Value must be in the range 0 <= degree < MAX_DEGREE.
 /// @return Zero on success, -EINVAL on invalid argument.
-SYSCALL_DEFINE1(set_orientation, int, degree) {
+SYSCALL_DEFINE1(set_orientation, int, degree)
+{
 	if (degree < 0 || degree >= MAX_DEGREE) {
 		return -EINVAL;
 	}
@@ -59,7 +62,8 @@ SYSCALL_DEFINE1(set_orientation, int, degree) {
 /// @param high The end of the degree range (inclusive). Value must be in the range 0 <= high < MAX_DEGREE.
 /// @param type The type of the access claimed. Value must be either ROT_READ or ROT_WRITE.
 /// @return On success, returns a non-negative lock ID that is unique for each call to rotation_lock. On invalid argument, returns -EINVAL.
-SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
+SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
+{
 	int i;
 
 	/* Make sure the locks are initialized */
@@ -79,7 +83,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
 
 	DEFINE_WAIT(wait);
 	add_wait_queue(&requests, &wait);
-	int writer_waiting = 0; // Flag to keep track of whether `waiting_writers` is containing current process
+	int writer_waiting =
+		0; // Flag to keep track of whether `waiting_writers` is containing current process
 
 	mutex_lock(&orientation_mutex);
 	mutex_lock(&locks_mutex);
@@ -92,6 +97,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
 		if (type == ROT_WRITE && !writer_waiting) {
 			mutex_lock(&locks_mutex);
 			for (i = low; i <= high; i++) {
+				if (i == MAX_DEGREE)
+					i = 0;
 				locks[i].waiting_writers++;
 			}
 			writer_waiting = 1;
@@ -109,6 +116,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
 	if (writer_waiting) {
 		mutex_lock(&locks_mutex);
 		for (i = low; i <= high; i++) {
+			if (i == MAX_DEGREE)
+				i = 0;
 			locks[i].waiting_writers--;
 		}
 		writer_waiting = 0;
@@ -117,6 +126,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
 
 	/* Increment the active_xxx count */
 	for (i = low; i <= high; i++) {
+		if (i == MAX_DEGREE)
+			i = 0;
 		if (type == ROT_READ) {
 			locks[i].active_readers++;
 		} else {
@@ -132,7 +143,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
 /// @brief Revoke access claimed by a call to rotation_lock.
 /// @param id The ID associated with the access to revoke.
 /// @return On success, returns 0. On invalid argument, returns -EINVAL. On permission error, returns -EPERM.
-SYSCALL_DEFINE1(rotation_unlock, long, id) {
+SYSCALL_DEFINE1(rotation_unlock, long, id)
+{
 	int i;
 
 	/* Negative id, return -EINVAL */
@@ -153,6 +165,8 @@ SYSCALL_DEFINE1(rotation_unlock, long, id) {
 	mutex_lock(&locks_mutex);
 	list_del(&lock->list);
 	for (i = lock->low; i <= lock->high; i++) {
+		if (i == MAX_DEGREE)
+			i = 0;
 		if (lock->type == ROT_READ) {
 			locks[i].active_readers--;
 		} else {
@@ -169,7 +183,8 @@ SYSCALL_DEFINE1(rotation_unlock, long, id) {
 	return 0;
 }
 
-void locks_init(void) {
+void locks_init(void)
+{
 	int i;
 	if (locks_initialized) {
 		return;
@@ -183,14 +198,16 @@ void locks_init(void) {
 	locks_initialized = 1;
 }
 
-int orientation_in_range(int low, int high) {
+int orientation_in_range(int low, int high)
+{
 	if (low <= high)
 		return device_orientation >= low && device_orientation <= high;
 	else
 		return device_orientation >= low || device_orientation <= high;
 }
 
-int lock_available(int low, int high, int type) {
+int lock_available(int low, int high, int type)
+{
 	int i;
 
 	if (!orientation_in_range(low, high))
@@ -199,6 +216,8 @@ int lock_available(int low, int high, int type) {
 	if (type == ROT_READ) {
 		/* Reader */
 		for (i = low; i <= high; i++) {
+			if (i == MAX_DEGREE)
+				i = 0;
 			if (locks[i].active_writers > 0 ||
 			    locks[i].waiting_writers > 0) {
 				return 0;
@@ -207,9 +226,9 @@ int lock_available(int low, int high, int type) {
 		return 1;
 	} else {
 		/* Writer */
-
-		int flag = 1; // Whether the lock is available
 		for (i = low; i <= high; i++) {
+			if (i == MAX_DEGREE)
+				i = 0;
 			if (locks[i].active_readers > 0 ||
 			    locks[i].active_writers > 0) {
 				return 0;
@@ -219,6 +238,6 @@ int lock_available(int low, int high, int type) {
 	}
 }
 
-struct lock_info *find_lock(long id) {
-
+struct lock_info *find_lock(long id)
+{
 }
