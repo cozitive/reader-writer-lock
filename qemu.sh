@@ -33,3 +33,4 @@ exec qemu-system-aarch64           `# The QEMU system emulator `\
   -drive file=tizen-image/boot.img,format=raw,if=none,id=boot -device virtio-blk-device,drive=boot  \
   -drive file=tizen-image/modules.img,format=raw,if=none,id=modules -device virtio-blk-device,drive=modules  \
   -drive file=tizen-image/system-data.img,format=raw,if=none,id=system-data -device virtio-blk-device,drive=system-data
+  -s # Open a gdbserver on port 1234 for debugging
