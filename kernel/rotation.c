@@ -10,12 +10,12 @@
 #define MAX_DEGREE 360
 
 static int device_orientation = 0;
-static DEFINE_MUTEX(orientation_lock);
+static DEFINE_MUTEX(orientation_mutex);
 
 static LIST_HEAD(locks_info); // Information of currently held locks
-static struct reader_writer_lock locks_counts[MAX_DEGREE];
-static DEFINE_MUTEX(locks_info_lock); // Mutex to protect `locks_info` and `locks_counts`
-static int is_locks_counts_initialized = 0; // Whether the locks have been initialized
+static struct reader_writer_lock locks[MAX_DEGREE];
+static DEFINE_MUTEX(locks_mutex); // Mutex to protect `locks_info` and `locks`
+static int locks_initialized = 0; // Whether the locks have been initialized
 
 static DECLARE_WAIT_QUEUE_HEAD(requests); // Queue of requests
 
@@ -40,23 +40,23 @@ int lock_available(int low, int high, int type);
 struct lock_info *find_lock(long id);
 
 /// @brief Set the current device orientation.
-/// @param degree The degree to set as the current device orientation. Value must be in the range 0 <= degree < 360.
+/// @param degree The degree to set as the current device orientation. Value must be in the range 0 <= degree < MAX_DEGREE.
 /// @return Zero on success, -EINVAL on invalid argument.
 SYSCALL_DEFINE1(set_orientation, int, degree) {
 	if (degree < 0 || degree >= MAX_DEGREE) {
 		return -EINVAL;
 	}
 
-	mutex_lock(&orientation_lock);
+	mutex_lock(&orientation_mutex);
 	device_orientation = degree;
-	mutex_unlock(&orientation_lock);
+	mutex_unlock(&orientation_mutex);
 
 	return 0;
 }
 
 /// @brief Claim read or write access in the specified degree range.
-/// @param low The beginning of the degree range (inclusive). Value must be in the range 0 <= low < 360.
-/// @param high The end of the degree range (inclusive). Value must be in the range 0 <= high < 360.
+/// @param low The beginning of the degree range (inclusive). Value must be in the range 0 <= low < MAX_DEGREE.
+/// @param high The end of the degree range (inclusive). Value must be in the range 0 <= high < MAX_DEGREE.
 /// @param type The type of the access claimed. Value must be either ROT_READ or ROT_WRITE.
 /// @return On success, returns a non-negative lock ID that is unique for each call to rotation_lock. On invalid argument, returns -EINVAL.
 SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
@@ -65,7 +65,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
 	/* Make sure the locks are initialized */
 	locks_init();
 
-	if (low < 0 || low >= 360 || high < 0 || high >= 360 ||
+	if (low < 0 || low >= MAX_DEGREE || high < 0 || high >= MAX_DEGREE ||
 	    (type != ROT_READ && type != ROT_WRITE))
 		return -EINVAL;
 
@@ -81,50 +81,50 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type) {
 	add_wait_queue(&requests, &wait);
 	int writer_waiting = 0; // Flag to keep track of whether `waiting_writers` is containing current process
 
-	mutex_lock(&orientation_lock);
-	mutex_lock(&locks_info_lock);
+	mutex_lock(&orientation_mutex);
+	mutex_lock(&locks_mutex);
 	while (!lock_available(low, high, type)) {
-		mutex_unlock(&orientation_lock);
-		mutex_unlock(&locks_info_lock);
+		mutex_unlock(&orientation_mutex);
+		mutex_unlock(&locks_mutex);
 		prepare_to_wait(&requests, &wait, TASK_INTERRUPTIBLE);
 
 		/* Increment the waiting_writers count */
 		if (type == ROT_WRITE && !writer_waiting) {
-			mutex_lock(&locks_info_lock);
+			mutex_lock(&locks_mutex);
 			for (i = low; i <= high; i++) {
-				locks_counts[i].waiting_writers++;
+				locks[i].waiting_writers++;
 			}
 			writer_waiting = 1;
-			mutex_unlock(&locks_info_lock);
+			mutex_unlock(&locks_mutex);
 		}
 		schedule();
 	}
 	finish_wait(&requests, &wait);
-	mutex_unlock(&orientation_lock);
+	mutex_unlock(&orientation_mutex);
 
 	/* Add the lock to the list */
 	list_add(&lock->list, &locks_info);
 
 	/* Decrement the waiting_writers count */
 	if (writer_waiting) {
-		mutex_lock(&locks_info_lock);
+		mutex_lock(&locks_mutex);
 		for (i = low; i <= high; i++) {
-			locks_counts[i].waiting_writers--;
+			locks[i].waiting_writers--;
 		}
 		writer_waiting = 0;
-		mutex_unlock(&locks_info_lock);
+		mutex_unlock(&locks_mutex);
 	}
 
 	/* Increment the active_xxx count */
 	for (i = low; i <= high; i++) {
 		if (type == ROT_READ) {
-			locks_counts[i].active_readers++;
+			locks[i].active_readers++;
 		} else {
-			locks_counts[i].active_writers++;
+			locks[i].active_writers++;
 		}
 	}
 
-	mutex_unlock(&locks_info_lock);
+	mutex_unlock(&locks_mutex);
 
 	return lock->id;
 }
@@ -150,16 +150,16 @@ SYSCALL_DEFINE1(rotation_unlock, long, id) {
 		return -EPERM;
 
 	/* Delete the lock from list */
-	mutex_lock(&locks_info_lock);
+	mutex_lock(&locks_mutex);
 	list_del(&lock->list);
 	for (i = lock->low; i <= lock->high; i++) {
 		if (lock->type == ROT_READ) {
-			locks_counts[i].active_readers--;
+			locks[i].active_readers--;
 		} else {
-			locks_counts[i].active_writers--;
+			locks[i].active_writers--;
 		}
 	}
-	mutex_unlock(&locks_info_lock);
+	mutex_unlock(&locks_mutex);
 
 	kfree(lock);
 
@@ -171,16 +171,16 @@ SYSCALL_DEFINE1(rotation_unlock, long, id) {
 
 void locks_init(void) {
 	int i;
-	if (is_locks_counts_initialized) {
+	if (locks_initialized) {
 		return;
 	}
 
-	for (i = 0; i < 360; i++) {
-		locks_counts[i].active_readers = 0;
-		locks_counts[i].active_writers = 0;
-		locks_counts[i].waiting_writers = 0;
+	for (i = 0; i < MAX_DEGREE; i++) {
+		locks[i].active_readers = 0;
+		locks[i].active_writers = 0;
+		locks[i].waiting_writers = 0;
 	}
-	is_locks_counts_initialized = 1;
+	locks_initialized = 1;
 }
 
 int orientation_in_range(int low, int high) {
@@ -199,8 +199,8 @@ int lock_available(int low, int high, int type) {
 	if (type == ROT_READ) {
 		/* Reader */
 		for (i = low; i <= high; i++) {
-			if (locks_counts[i].active_writers > 0 ||
-			    locks_counts[i].waiting_writers > 0) {
+			if (locks[i].active_writers > 0 ||
+			    locks[i].waiting_writers > 0) {
 				return 0;
 			}
 		}
@@ -210,8 +210,8 @@ int lock_available(int low, int high, int type) {
 
 		int flag = 1; // Whether the lock is available
 		for (i = low; i <= high; i++) {
-			if (locks_counts[i].active_readers > 0 ||
-			    locks_counts[i].active_writers > 0) {
+			if (locks[i].active_readers > 0 ||
+			    locks[i].active_writers > 0) {
 				return 0;
 			}
 		}
