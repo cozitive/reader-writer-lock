@@ -8,8 +8,6 @@
 #include <linux/sched.h>
 
 #define MAX_DEGREE 360
-#define MIN(a, b) (((a) < (b)) ? (a) : (b))
-#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 static int device_orientation = 0;
 static DEFINE_MUTEX(orientation_mutex);
@@ -107,7 +105,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 			writer_waiting = 1;
 			mutex_unlock(&locks_mutex);
 		}
-		schedule();
+		schedule(); // Go to sleep
 	}
 	finish_wait(&requests, &wait);
 	mutex_unlock(&orientation_mutex);
