@@ -110,8 +110,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 			mutex_unlock(&locks_mutex);
 		}
 		schedule(); // Go to sleep
-		mutex_lock(&locks_mutex);
 		mutex_lock(&orientation_mutex);
+		mutex_lock(&locks_mutex);
 	}
 
 	/* Delete current task in wait queue */
