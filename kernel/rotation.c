@@ -151,18 +151,24 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	if (id < 0)
 		return -EINVAL;
 
-	struct lock_info *lock = find_lock(id); // TODO: find_lock() 구현
+	mutex_lock(&locks_mutex);
+	struct lock_info *lock = find_lock(id);
 
 	/* No such lock, return -EINVAL */
 	if (lock == NULL)
+	{
+		mutex_unlock(&locks_mutex);
 		return -EINVAL;
+	}
 
 	/* Process is not the owner of the lock, return -EPERM */
 	if (lock->pid != current->pid)
+	{
+		mutex_unlock(&locks_mutex);
 		return -EPERM;
+	}
 
 	/* Delete the lock from list */
-	mutex_lock(&locks_mutex);
 	list_del(&lock->list);
 	for (i = lock->low; i <= lock->high; i++) {
 		if (i == MAX_DEGREE)
@@ -240,4 +246,11 @@ int lock_available(int low, int high, int type)
 
 struct lock_info *find_lock(long id)
 {
+	struct lock_info *lock;
+	list_for_each_entry(lock, &locks_info, list) {
+		if (lock->id == id) {
+			return lock;
+		}
+	}
+	return NULL;
 }
