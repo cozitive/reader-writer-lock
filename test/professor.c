@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
 	sscanf(argv[1], "%d", &curr);
 
 	while (1) {
-		if (rotation_lock(0, 180, ROT_WRITE) < 0) {
+		if (lock_id = rotation_lock(0, 180, ROT_WRITE) < 0) {
 			perror("rotation_lock");
 			return EXIT_FAILURE;
 		}
@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 		}
 		fd = -1;
 
-		if (rotation_unlock(0) < 0) {
+		if (rotation_unlock(lock_id) < 0) {
 			perror("rotation_unlock");
 			cleanup();
 			return EXIT_FAILURE;
