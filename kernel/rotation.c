@@ -22,6 +22,7 @@ static int locks_initialized = 0; // Whether the locks have been initialized
 static DECLARE_WAIT_QUEUE_HEAD(requests); // Queue of requests
 
 static long next_lock_id = 0; // The next lock ID to use
+static DEFINE_MUTEX(next_lock_id_mutex); // Mutex to protect `next_lock_id`
 
 /// @brief Initialize `locks` if they haven't yet.
 void locks_init(void);
@@ -75,7 +76,9 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 
 	/* Create a new lock */
 	struct lock_info *lock = kmalloc(sizeof(struct lock_info), GFP_KERNEL);
+	mutex_lock(&next_lock_id_mutex);
 	lock->id = next_lock_id++;
+	mutex_unlock(&next_lock_id_mutex);
 	lock->pid = current->pid;
 	lock->low = low;
 	lock->high = high;
