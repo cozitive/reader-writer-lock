@@ -4,12 +4,12 @@
 #define ROT_WRITE 1
 
 struct lock_info {
-    long id; // ID of lock
-    pid_t pid; // Process ID of process that owns the lock
-    int low; // low degree of range
-    int high; // high degree of range
+    long id; // Unique ID of lock
+    pid_t pid; // Process ID owning the lock
+    int low; // The beginning of degree range
+    int high; // The end of degree range
     int type; // ROT_READ or ROT_WRITE
-    struct list_head list;
+    struct list_head node; // Pointer to list node
 };
 
 struct reader_writer_lock {
