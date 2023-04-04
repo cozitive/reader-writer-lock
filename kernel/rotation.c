@@ -64,7 +64,6 @@ SYSCALL_DEFINE1(set_orientation, int, degree)
 SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 {
 	int i;
-	int is_loop_visited = 0;
 
 	/* Return -EINVAL if arguments are invalid */
 	if (low < 0 || low >= MAX_DEGREE || high < 0 || high >= MAX_DEGREE ||
@@ -96,7 +95,6 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	while (!lock_available(low, high, type)) {
 		mutex_unlock(&orientation_mutex);
 		mutex_unlock(&locks_mutex);
-		is_loop_visited = 1;
 
 		prepare_to_wait(&requests, &wait, TASK_INTERRUPTIBLE);
 
@@ -114,16 +112,16 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 		}
 
 		schedule(); // Go to sleep
+
+		mutex_lock(&orientation_mutex);
+		mutex_lock(&locks_mutex);
 	}
 
-	if (!is_loop_visited) {
-		mutex_unlock(&locks_mutex);
-		mutex_unlock(&orientation_mutex);
-	}
+	mutex_unlock(&orientation_mutex);
+	mutex_unlock(&locks_mutex);
 
 	/* Delete current task in wait queue */
 	finish_wait(&requests, &wait);
-
 
 	mutex_lock(&locks_mutex);
 
