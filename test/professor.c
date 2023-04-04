@@ -4,12 +4,39 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
 #include "common.h"
 #include "wrappers.h"
+
+/* Global variables are not good but they are needed for the signal handler!!! */
+int fd = -1; // file descriptor
+long lock_id = -1; // rotation lock id
+
+void cleanup() {
+    if (fd > 0) {
+        if (close(fd) < 0) {
+			perror("close");
+			return EXIT_FAILURE;
+		}
+    }
+	if (lock_id > 0) {
+		if (rotation_unlock(lock_id) < 0) {
+			perror("rotation_unlock");
+			return EXIT_FAILURE;
+		}
+	}
+}
+
+void sigint_handler(int sig) {
+    printf("professor: received SIGINT\n");
+    cleanup();
+    exit(EXIT_SUCCESS);
+}
 
 int main(int argc, char *argv[])
 {
 	int curr = 0;
+    signal(SIGINT, sigint_handler);
 
 	if (argc != 2) {
 		printf("%s\n", "Usage: ./professor STARTING_INTEGER");
@@ -19,12 +46,11 @@ int main(int argc, char *argv[])
 	sscanf(argv[1], "%d", &curr);
 
 	while (1) {
-		long lock_id;
-		if (lock_id = rotation_lock(0, 180, ROT_WRITE) < 0) {
+		if (rotation_lock(0, 180, ROT_WRITE) < 0) {
 			perror("rotation_lock");
 			return EXIT_FAILURE;
 		}
-		int fd = open("quiz", O_WRONLY | O_CREAT, 0644);
+		fd = open("quiz", O_WRONLY | O_CREAT, 0644);
 		if (fd < 0) {
 			perror("open");
 			return EXIT_FAILURE;
@@ -35,16 +61,23 @@ int main(int argc, char *argv[])
 
 		if (write(fd, buf, strlen(buf)) < 0) {
 			perror("write");
-			close(fd);
+            cleanup();
 			return EXIT_FAILURE;
 		}
 
-		close(fd);
+		if (close(fd) < 0) {
+			perror("close");
+			cleanup();
+			return EXIT_FAILURE;
+		}
+		fd = -1;
 
-		if (rotation_unlock(lock_id) < 0) {
+		if (rotation_unlock(0) < 0) {
 			perror("rotation_unlock");
+			cleanup();
 			return EXIT_FAILURE;
 		}
+		lock_id = -1;
 
 		printf("professor: %d\n", curr);
 		curr++;
