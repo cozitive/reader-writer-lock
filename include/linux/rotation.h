@@ -1,6 +1,4 @@
 #include <linux/list.h>
-#include <linux/wait.h>
-#include <linux/mutex.h>
 
 #define ROT_READ 0
 #define ROT_WRITE 1
