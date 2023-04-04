@@ -16,13 +16,13 @@ void cleanup() {
     if (fd > 0) {
         if (close(fd) < 0) {
 			perror("close");
-			return EXIT_FAILURE;
+			exit(EXIT_FAILURE);
 		}
     }
 	if (lock_id > 0) {
 		if (rotation_unlock(lock_id) < 0) {
 			perror("rotation_unlock");
-			return EXIT_FAILURE;
+			exit(EXIT_FAILURE);
 		}
 	}
 }
@@ -48,11 +48,13 @@ int main(int argc, char *argv[])
 	while (1) {
 		if (lock_id = rotation_lock(0, 180, ROT_WRITE) < 0) {
 			perror("rotation_lock");
+			cleanup();
 			return EXIT_FAILURE;
 		}
 		fd = open("quiz", O_WRONLY | O_CREAT, 0644);
 		if (fd < 0) {
 			perror("open");
+			cleanup();
 			return EXIT_FAILURE;
 		}
 
@@ -85,4 +87,5 @@ int main(int argc, char *argv[])
 		sleep(1);
 	}
 	return EXIT_SUCCESS;
+	sscanf(buf, "%d", &num)
 }

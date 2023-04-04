@@ -2,15 +2,20 @@ CC=aarch64-linux-gnu-gcc
 CFLAGS=-static
 TARGETS=rotd professor student
 OBJECTS=wrappers.o
-TESTS=
 
 all: $(TARGETS)
 
-%: %.c
+rotd: rotd.c
 	$(CC) $(CFLAGS) -o $@ $<
 
-%.o: %.c
+wrappers.o: wrappers.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+professor: professor.c $(OBJECTS)
+	$(CC) $(CFLAGS) -o $@ $^
+
+student: student.c $(OBJECTS)
+	$(CC) $(CFLAGS) -o $@ $^
+
 clean:
-	rm -f $(TARGETS) $(OBJECTS) $(TESTS)
+	rm -f $(TARGETS) $(OBJECTS)
