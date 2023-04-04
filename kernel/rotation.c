@@ -107,10 +107,9 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 				}
 				locks[i].waiting_writers++;
 			}
-			mutex_unlock(&locks_mutex);
 			writer_waiting = 1;
+			mutex_unlock(&locks_mutex);
 		}
-
 		schedule(); // Go to sleep
 
 		mutex_lock(&orientation_mutex);
@@ -127,7 +126,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 
 	/* Add the lock info to holding lock list */
 	list_add(&lock->list, &locks_info);
-	
+
 	/* Decrement the waiting_writers count */
 	if (writer_waiting) {
 		for (i = low; i <= high; i++) {
