@@ -116,7 +116,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 		schedule(); // Go to sleep
 	}
 
-	if (is_loop_visited) {
+	if (!is_loop_visited) {
 		mutex_unlock(&locks_mutex);
 		mutex_unlock(&orientation_mutex);
 	}
