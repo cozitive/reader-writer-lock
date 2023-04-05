@@ -63,6 +63,12 @@ int *factorize(int num)
 
 int main(int argc, char *argv[])
 {
+	if (signal(SIGINT, sigint_handler) < 0)
+	{
+		perror("signal");
+		return EXIT_FAILURE;
+	}
+
 	if (argc != 3) {
 		printf("Usage: ./student LOW HIGH\n");
 		return EXIT_FAILURE;
