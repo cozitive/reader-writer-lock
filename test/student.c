@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
 	}
 
 	while (1) {
-		if (lock_id = rotation_lock(low, high, ROT_READ) < 0) {
+		if ((lock_id = rotation_lock(low, high, ROT_READ)) < 0) {
 			perror("rotation_lock");
             cleanup();
 			return EXIT_FAILURE;

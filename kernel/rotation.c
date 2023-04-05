@@ -19,7 +19,7 @@ static int locks_initialized = 0; // Whether the locks have been initialized
 
 static DECLARE_WAIT_QUEUE_HEAD(requests); // Queue of requests
 
-static long next_lock_id = 0; // The next lock ID to use
+static long next_lock_id = 30; // The next lock ID to use
 static DEFINE_MUTEX(next_lock_id_mutex); // Mutex to protect `next_lock_id`
 
 /// @brief Initialize `locks` if they haven't yet.
@@ -85,6 +85,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	lock->low = low;
 	lock->high = high;
 	lock->type = type;
+	INIT_LIST_HEAD(&lock->list);
 
 	/* Add current task to wait queue */
 	DEFINE_WAIT(wait);
@@ -147,7 +148,6 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	}
 
 	mutex_unlock(&locks_mutex);
-
 	return lock->id;
 }
 
@@ -200,7 +200,7 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	/* Wake up all processes waiting for the lock */
 	wake_up_all(&requests);
 
-	return 0;
+	return 500;
 }
 
 void locks_init(void)

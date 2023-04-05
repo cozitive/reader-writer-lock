@@ -1,5 +1,5 @@
 CC=aarch64-linux-gnu-gcc
-CFLAGS=-static
+CFLAGS=-static -g
 TARGETS=rotd professor student
 OBJECTS=wrappers.o
 
@@ -16,6 +16,9 @@ professor: professor.c $(OBJECTS)
 
 student: student.c $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $^
+
+%: %.c
+	$(CC) $(CFLAGS) -o $@ $<
 
 clean:
 	rm -f $(TARGETS) $(OBJECTS)
