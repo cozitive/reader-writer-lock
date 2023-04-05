@@ -53,6 +53,8 @@ SYSCALL_DEFINE1(set_orientation, int, degree)
 	device_orientation = degree;
 	mutex_unlock(&orientation_mutex);
 
+	wake_up_all(&requests);
+
 	return 0;
 }
 
