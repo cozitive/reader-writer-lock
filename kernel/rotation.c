@@ -85,6 +85,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	lock->low = low;
 	lock->high = high;
 	lock->type = type;
+	INIT_LIST_HEAD(&lock->list);
 
 	/* Add current task to wait queue */
 	DEFINE_WAIT(wait);
@@ -147,7 +148,6 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	}
 
 	mutex_unlock(&locks_mutex);
-
 	return lock->id;
 }
 
