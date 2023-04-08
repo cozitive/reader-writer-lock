@@ -119,7 +119,6 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 
 	/* Delete current task in wait queue */
 	finish_wait(&requests, &wait);
-	mutex_unlock(&orientation_mutex);
 
 	/* Add the lock info to holding lock list */
 	list_add(&lock->list, &locks_info);
@@ -147,6 +146,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 		}
 	}
 
+	mutex_unlock(&orientation_mutex);
 	mutex_unlock(&locks_mutex);
 	return lock->id;
 }
