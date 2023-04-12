@@ -22,6 +22,8 @@ static DECLARE_WAIT_QUEUE_HEAD(requests); // Queue of requests
 static long next_lock_id = 0; // The next lock ID to use
 static DEFINE_MUTEX(next_lock_id_mutex); // Mutex to protect `next_lock_id`
 
+ssize_t unlock(long id);
+
 /// @brief Initialize `locks` if they haven't yet.
 void locks_init(void);
 
@@ -156,6 +158,12 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 /// @return On success, returns 0. On invalid argument, returns -EINVAL. On permission error, returns -EPERM.
 SYSCALL_DEFINE1(rotation_unlock, long, id)
 {
+	return unlock(id);
+}
+
+ssize_t unlock(long id) {
+	printk("\nunlock\n");
+
 	int i;
 
 	/* Return -EINVAL if id is negative */
@@ -271,4 +279,14 @@ struct lock_info *find_lock(long id)
 		}
 	}
 	return NULL;
+}
+
+void exit_rotlock(struct task_struct *tsk)
+{
+	struct lock_info *lock;
+	list_for_each_entry(lock, &locks_info, list) {
+		if (lock->pid == tsk->pid) {
+			unlock(lock->id);
+		}
+	}
 }

@@ -74,6 +74,8 @@ int main(int argc, char *argv[])
 		}
 		fd = -1;
 
+		// sleep(10);
+
 		if (rotation_unlock(lock_id) < 0) {
 			perror("rotation_unlock");
 			cleanup();
