@@ -284,9 +284,12 @@ struct lock_info *find_lock(long id)
 void exit_rotlock(struct task_struct *tsk)
 {
 	struct lock_info *lock;
+	mutex_lock(&locks_mutex);
+	
 	list_for_each_entry(lock, &locks_info, list) {
 		if (lock->pid == tsk->pid) {
 			unlock(lock->id);
 		}
 	}
+	mutex_unlock(&locks_mutex);
 }
