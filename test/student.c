@@ -12,8 +12,7 @@
 int fd = -1; // file descriptor
 long lock_id = -1; // rotation lock id
 
-void cleanup()
-{
+void cleanup() {
 	if (fd > 0) {
 		if (close(fd) < 0) {
 			perror("close");
@@ -28,18 +27,10 @@ void cleanup()
 	}
 }
 
-void sigint_handler(int sig)
-{
-	printf("student: received SIGINT\n");
-	cleanup();
-	exit(EXIT_SUCCESS);
-}
-
 /// @brief Factorize a number using Trial Division
 /// @param num The number to factorize
 /// @return An array of factors. The last element is -1.
-int *factorize(int num)
-{
+int *factorize(int num) {
     int *factors = malloc(sizeof(int) * 100);
     if (factors == NULL) {
         perror("malloc");
@@ -61,14 +52,7 @@ int *factorize(int num)
     return factors;
 }
 
-int main(int argc, char *argv[])
-{
-	if (signal(SIGINT, sigint_handler) < 0)
-	{
-		perror("signal");
-		return EXIT_FAILURE;
-	}
-
+int main(int argc, char *argv[]) {
 	if (argc != 3) {
 		printf("Usage: ./student LOW HIGH\n");
 		return EXIT_FAILURE;

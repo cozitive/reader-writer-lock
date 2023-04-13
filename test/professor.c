@@ -27,16 +27,8 @@ void cleanup() {
 	}
 }
 
-void sigint_handler(int sig) {
-    printf("professor: received SIGINT\n");
-    cleanup();
-    exit(EXIT_SUCCESS);
-}
-
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 	int curr = 0;
-    signal(SIGINT, sigint_handler);
 
 	if (argc != 2) {
 		printf("%s\n", "Usage: ./professor STARTING_INTEGER");
@@ -74,11 +66,8 @@ int main(int argc, char *argv[])
 		}
 		fd = -1;
 
-		// sleep(10);
-
 		if (rotation_unlock(lock_id) < 0) {
 			perror("rotation_unlock");
-			cleanup();
 			return EXIT_FAILURE;
 		}
 		lock_id = -1;
