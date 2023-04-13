@@ -158,12 +158,13 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 /// @return On success, returns 0. On invalid argument, returns -EINVAL. On permission error, returns -EPERM.
 SYSCALL_DEFINE1(rotation_unlock, long, id)
 {
-	return unlock(id);
+	mutex_lock(&locks_mutex);
+	ssize_t result = unlock(id);
+	mutex_unlock(&locks_mutex);
+	return result;
 }
 
 ssize_t unlock(long id) {
-	printk("\nunlock\n");
-
 	int i;
 
 	/* Return -EINVAL if id is negative */
@@ -171,20 +172,16 @@ ssize_t unlock(long id) {
 		return -EINVAL;
 	}
 
-	mutex_lock(&locks_mutex);
-
 	/* Find the corresponding lock */
 	struct lock_info *lock = find_lock(id);
 
 	/* Return -EINVAL if no such lock */
 	if (lock == NULL) {
-		mutex_unlock(&locks_mutex);
 		return -EINVAL;
 	}
 
 	/* Return -EPERM if the process doesn't own the lock */
 	if (lock->pid != current->pid) {
-		mutex_unlock(&locks_mutex);
 		return -EPERM;
 	}
 
@@ -200,9 +197,6 @@ ssize_t unlock(long id) {
 			locks[i].active_writers--;
 		}
 	}
-
-	mutex_unlock(&locks_mutex);
-
 	kfree(lock);
 
 	/* Wake up all processes waiting for the lock */
@@ -285,11 +279,30 @@ void exit_rotlock(struct task_struct *tsk)
 {
 	struct lock_info *lock;
 	mutex_lock(&locks_mutex);
-	
+	struct lock_info *before = NULL;
 	list_for_each_entry(lock, &locks_info, list) {
 		if (lock->pid == tsk->pid) {
-			unlock(lock->id);
+			int i;
+			if (before != NULL) {
+				list_del(&before->list);
+			}
+			before = lock;
+			for (i = lock->low; i <= lock->high; i++) {
+				if (i == MAX_DEGREE) {
+					i = 0;
+				}
+				if (lock->type == ROT_READ) {
+					locks[i].active_readers--;
+				} else {
+					locks[i].active_writers--;
+				}
+			}
+			kfree(lock);
+			wake_up_all(&requests);
 		}
+	}
+	if (before != NULL) {
+		list_del(&before->list);
 	}
 	mutex_unlock(&locks_mutex);
 }
