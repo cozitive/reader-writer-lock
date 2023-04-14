@@ -166,7 +166,7 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	}
 
 	mutex_lock(&locks_mutex);
-	
+
 	/* Find the corresponding lock */
 	struct lock_info *lock = find_lock(id);
 
@@ -278,6 +278,8 @@ struct lock_info *find_lock(long id)
 void exit_rotlock(struct task_struct *tsk)
 {
 	struct lock_info *lock;
+	LIST_HEAD(garbage); // List of locks to be freed
+
 	mutex_lock(&locks_mutex);
 	struct lock_info *before = NULL;
 	list_for_each_entry(lock, &locks_info, list) {
@@ -285,6 +287,7 @@ void exit_rotlock(struct task_struct *tsk)
 			int i;
 			if (before != NULL) {
 				list_del(&before->list);
+				list_add(&before->list, &garbage);
 			}
 			before = lock;
 			for (i = lock->low; i <= lock->high; i++) {
@@ -297,12 +300,24 @@ void exit_rotlock(struct task_struct *tsk)
 					locks[i].active_writers--;
 				}
 			}
-			kfree(lock);
-			wake_up_all(&requests);
 		}
 	}
 	if (before != NULL) {
 		list_del(&before->list);
+		list_add(&before->list, &garbage);
 	}
 	mutex_unlock(&locks_mutex);
+	wake_up_all(&requests);
+
+	/* Clean up garbage */
+	struct list_head *node;
+	struct lock_info *element;
+	while (!list_empty(&garbage)) {
+		node = garbage.next;
+		element = list_entry(node, struct lock_info, list);
+		list_del(node);
+		if (element != NULL) {
+			kfree(element);
+		}
+	}
 }

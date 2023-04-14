@@ -4,7 +4,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
-#include <signal.h>
 #include "common.h"
 #include "wrappers.h"
 
@@ -16,12 +15,6 @@ void cleanup() {
 	if (fd > 0) {
 		if (close(fd) < 0) {
 			perror("close");
-			exit(EXIT_FAILURE);
-		}
-	}
-	if (lock_id > 0) {
-		if (rotation_unlock(lock_id) < 0) {
-			perror("rotation_unlock");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -40,7 +33,6 @@ int main(int argc, char *argv[]) {
 	while (1) {
 		if ((lock_id = rotation_lock(0, 180, ROT_WRITE)) < 0) {
 			perror("rotation_lock");
-			cleanup();
 			return EXIT_FAILURE;
 		}
 		fd = open("quiz", O_WRONLY | O_CREAT, 0644);
@@ -61,7 +53,6 @@ int main(int argc, char *argv[]) {
 
 		if (close(fd) < 0) {
 			perror("close");
-			cleanup();
 			return EXIT_FAILURE;
 		}
 		fd = -1;
