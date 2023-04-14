@@ -158,7 +158,6 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 /// @return On success, returns 0. On invalid argument, returns -EINVAL. On permission error, returns -EPERM.
 SYSCALL_DEFINE1(rotation_unlock, long, id)
 {
-	mutex_lock(&locks_mutex);
 	int i;
 
 	/* Return -EINVAL if id is negative */
@@ -166,16 +165,20 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 		return -EINVAL;
 	}
 
+	mutex_lock(&locks_mutex);
+	
 	/* Find the corresponding lock */
 	struct lock_info *lock = find_lock(id);
 
 	/* Return -EINVAL if no such lock */
 	if (lock == NULL) {
+		mutex_unlock(&locks_mutex);
 		return -EINVAL;
 	}
 
 	/* Return -EPERM if the process doesn't own the lock */
 	if (lock->pid != current->pid) {
+		mutex_unlock(&locks_mutex);
 		return -EPERM;
 	}
 
@@ -191,9 +194,10 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 			locks[i].active_writers--;
 		}
 	}
-	kfree(lock);
 
 	mutex_unlock(&locks_mutex);
+
+	kfree(lock);
 
 	/* Wake up all processes waiting for the lock */
 	wake_up_all(&requests);
