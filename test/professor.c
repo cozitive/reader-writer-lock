@@ -13,12 +13,12 @@ int fd = -1; // file descriptor
 long lock_id = -1; // rotation lock id
 
 void cleanup() {
-    if (fd > 0) {
-        if (close(fd) < 0) {
+	if (fd > 0) {
+		if (close(fd) < 0) {
 			perror("close");
 			exit(EXIT_FAILURE);
 		}
-    }
+	}
 	if (lock_id > 0) {
 		if (rotation_unlock(lock_id) < 0) {
 			perror("rotation_unlock");
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 
 		if (write(fd, buf, strlen(buf)) < 0) {
 			perror("write");
-            cleanup();
+			cleanup();
 			return EXIT_FAILURE;
 		}
 
