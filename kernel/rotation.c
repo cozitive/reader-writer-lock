@@ -71,7 +71,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 
 	/* Return -EINVAL if arguments are invalid */
 	if (low < 0 || low >= MAX_DEGREE || high < 0 || high >= MAX_DEGREE ||
-	    (type != ROT_READ && type != ROT_WRITE)) {
+		(type != ROT_READ && type != ROT_WRITE)) {
 		return -EINVAL;
 	}
 
@@ -159,12 +159,6 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 SYSCALL_DEFINE1(rotation_unlock, long, id)
 {
 	mutex_lock(&locks_mutex);
-	ssize_t result = unlock(id);
-	mutex_unlock(&locks_mutex);
-	return result;
-}
-
-ssize_t unlock(long id) {
 	int i;
 
 	/* Return -EINVAL if id is negative */
@@ -198,6 +192,8 @@ ssize_t unlock(long id) {
 		}
 	}
 	kfree(lock);
+
+	mutex_unlock(&locks_mutex);
 
 	/* Wake up all processes waiting for the lock */
 	wake_up_all(&requests);
