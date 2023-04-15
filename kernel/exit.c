@@ -771,10 +771,14 @@ static void check_stack_usage(void)
 static inline void check_stack_usage(void) {}
 #endif
 
+void exit_rotlock(struct task_struct *tsk);
+
 void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
 	int group_dead;
+
+	exit_rotlock(tsk);
 
 	profile_task_exit(tsk);
 	kcov_task_exit(tsk);

@@ -4,7 +4,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
-#include <signal.h>
 #include "common.h"
 #include "wrappers.h"
 
@@ -12,63 +11,41 @@
 int fd = -1; // file descriptor
 long lock_id = -1; // rotation lock id
 
-void cleanup()
-{
+void cleanup() {
 	if (fd > 0) {
 		if (close(fd) < 0) {
 			perror("close");
 			exit(EXIT_FAILURE);
 		}
 	}
-	if (lock_id > 0) {
-		if (rotation_unlock(lock_id) < 0) {
-			perror("rotation_unlock");
-			exit(EXIT_FAILURE);
-		}
-	}
-}
-
-void sigint_handler(int sig)
-{
-	printf("student: received SIGINT\n");
-	cleanup();
-	exit(EXIT_SUCCESS);
 }
 
 /// @brief Factorize a number using Trial Division
 /// @param num The number to factorize
 /// @return An array of factors. The last element is -1.
-int *factorize(int num)
-{
-    int *factors = malloc(sizeof(int) * 100);
-    if (factors == NULL) {
-        perror("malloc");
-        cleanup();
-        exit(EXIT_FAILURE);
-    }
-    int i = 2;
-    int j = 0;
-    while (num > 1) {
-        if (num % i == 0) {
-            factors[j] = i;
-            num /= i;
-            j++;
-        } else {
-            i++;
-        }
-    }
-    factors[j] = -1;
-    return factors;
+int *factorize(int num) {
+	int *factors = malloc(sizeof(int) * 100);
+	if (factors == NULL) {
+		perror("malloc");
+		cleanup();
+		exit(EXIT_FAILURE);
+	}
+	int i = 2;
+	int j = 0;
+	while (num > 1) {
+		if (num % i == 0) {
+			factors[j] = i;
+			num /= i;
+			j++;
+		} else {
+			i++;
+		}
+	}
+	factors[j] = -1;
+	return factors;
 }
 
-int main(int argc, char *argv[])
-{
-	if (signal(SIGINT, sigint_handler) < 0)
-	{
-		perror("signal");
-		return EXIT_FAILURE;
-	}
-
+int main(int argc, char *argv[]) {
 	if (argc != 3) {
 		printf("Usage: ./student LOW HIGH\n");
 		return EXIT_FAILURE;
@@ -88,14 +65,13 @@ int main(int argc, char *argv[])
 	while (1) {
 		if ((lock_id = rotation_lock(low, high, ROT_READ)) < 0) {
 			perror("rotation_lock");
-            cleanup();
 			return EXIT_FAILURE;
 		}
 
 		fd = open("quiz", O_RDONLY);
 		if (fd < 0) {
 			perror("open");
-            cleanup();
+			cleanup();
 			return EXIT_FAILURE;
 		}
 
@@ -111,29 +87,28 @@ int main(int argc, char *argv[])
 
 		printf("student-%d-%d: %d = ", low, high, num);
 
-        int *factors = factorize(num);
-        int i = 0;
-        while (factors[i] != -1) {
-            printf("%d", factors[i]);
-            i++;
-            if (factors[i] != -1) {
-                printf(" * ");
-            }
-        }
-        free(factors);
+		int *factors = factorize(num);
+		int i = 0;
+		while (factors[i] != -1) {
+			printf("%d", factors[i]);
+			i++;
+			if (factors[i] != -1) {
+				printf(" * ");
+			}
+		}
+		free(factors);
 		printf("\n");
 		if (close(fd) < 0) {
-            perror("close");
-            cleanup();
-            return EXIT_FAILURE;
-        }
-        fd = -1;
+			perror("close");
+			return EXIT_FAILURE;
+		}
+		fd = -1;
 
 		if (rotation_unlock(lock_id) < 0) {
 			perror("rotation_unlock");
 			return EXIT_FAILURE;
 		}
-        lock_id = -1;
+		lock_id = -1;
 
 		sleep(1);
 	}

@@ -22,6 +22,8 @@ static DECLARE_WAIT_QUEUE_HEAD(requests); // Queue of requests
 static long next_lock_id = 0; // The next lock ID to use
 static DEFINE_MUTEX(next_lock_id_mutex); // Mutex to protect `next_lock_id`
 
+ssize_t unlock(long id);
+
 /// @brief Initialize `locks` if they haven't yet.
 void locks_init(void);
 
@@ -69,7 +71,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 
 	/* Return -EINVAL if arguments are invalid */
 	if (low < 0 || low >= MAX_DEGREE || high < 0 || high >= MAX_DEGREE ||
-	    (type != ROT_READ && type != ROT_WRITE)) {
+		(type != ROT_READ && type != ROT_WRITE)) {
 		return -EINVAL;
 	}
 
@@ -271,4 +273,51 @@ struct lock_info *find_lock(long id)
 		}
 	}
 	return NULL;
+}
+
+void exit_rotlock(struct task_struct *tsk)
+{
+	struct lock_info *lock;
+	LIST_HEAD(garbage); // List of locks to be freed
+
+	mutex_lock(&locks_mutex);
+	struct lock_info *before = NULL;
+	list_for_each_entry(lock, &locks_info, list) {
+		if (lock->pid == tsk->pid) {
+			int i;
+			if (before != NULL) {
+				list_del(&before->list);
+				list_add(&before->list, &garbage);
+			}
+			before = lock;
+			for (i = lock->low; i <= lock->high; i++) {
+				if (i == MAX_DEGREE) {
+					i = 0;
+				}
+				if (lock->type == ROT_READ) {
+					locks[i].active_readers--;
+				} else {
+					locks[i].active_writers--;
+				}
+			}
+		}
+	}
+	if (before != NULL) {
+		list_del(&before->list);
+		list_add(&before->list, &garbage);
+	}
+	mutex_unlock(&locks_mutex);
+	wake_up_all(&requests);
+
+	/* Clean up garbage */
+	struct list_head *node;
+	struct lock_info *element;
+	while (!list_empty(&garbage)) {
+		node = garbage.next;
+		element = list_entry(node, struct lock_info, list);
+		list_del(node);
+		if (element != NULL) {
+			kfree(element);
+		}
+	}
 }
