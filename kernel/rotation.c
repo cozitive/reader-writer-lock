@@ -9,20 +9,20 @@
 
 #define MAX_DEGREE 360
 
-static int device_orientation = 0;
-static DEFINE_MUTEX(orientation_mutex);
+/* Primitives */
+static int device_orientation = 0; // Orientation degree of the device
+static int locks_initialized = 0; // Whether the locks have been initialized (bool)
+static long next_lock_id = 0; // The next lock ID to use
 
+/* Data structures */
 static LIST_HEAD(locks_info); // Information of currently held locks
 static struct reader_writer_lock locks[MAX_DEGREE]; // Numbers of readers/writers for each degree
-static DEFINE_MUTEX(locks_mutex); // Mutex to protect `locks_info` and `locks`
-static int locks_initialized = 0; // Whether the locks have been initialized
-
 static DECLARE_WAIT_QUEUE_HEAD(requests); // Queue of requests
 
-static long next_lock_id = 0; // The next lock ID to use
-static DEFINE_MUTEX(next_lock_id_mutex); // Mutex to protect `next_lock_id`
-
-ssize_t unlock(long id);
+/* Mutexes */
+static DEFINE_MUTEX(orientation_mutex); // Protect `orientation`
+static DEFINE_MUTEX(locks_mutex); // Protect `locks_info` and `locks`
+static DEFINE_MUTEX(next_lock_id_mutex); // Protect `next_lock_id`
 
 /// @brief Initialize `locks` if they haven't yet.
 void locks_init(void);
@@ -42,34 +42,44 @@ int lock_available(int low, int high, int type);
 /// @return The lock, or NULL if not found.
 struct lock_info *find_lock(long id);
 
+/// @brief Unlock `lock` from `locks`.
+/// @param lock The lock to be unlocked.
+void decrement_active_count(struct lock_info *lock);
+
 /// @brief Set the current device orientation.
-/// @param degree The degree to set as the current device orientation. Value must be in the range 0 <= degree < MAX_DEGREE.
-/// @return Zero on success, -EINVAL on invalid argument.
+/// @param degree The degree to set as the current device orientation. (0 <= degree < MAX_DEGREE)
+/// @return 0 on success, -EINVAL on invalid argument.
 SYSCALL_DEFINE1(set_orientation, int, degree)
 {
+	/* Error handling: invalid argument */
 	if (degree < 0 || degree >= MAX_DEGREE) {
 		return -EINVAL;
 	}
 
+	/* Set device orientation */
 	mutex_lock(&orientation_mutex);
 	device_orientation = degree;
 	mutex_unlock(&orientation_mutex);
 
+	/* Wake up all processes waiting for the lock */
 	wake_up_all(&requests);
 
 	return 0;
 }
 
 /// @brief Claim read or write access in the specified degree range.
-/// @param low The beginning of the degree range (inclusive). Value must be in the range 0 <= low < MAX_DEGREE.
-/// @param high The end of the degree range (inclusive). Value must be in the range 0 <= high < MAX_DEGREE.
-/// @param type The type of the access claimed. Value must be either ROT_READ or ROT_WRITE.
-/// @return On success, returns a non-negative lock ID that is unique for each call to rotation_lock. On invalid argument, returns -EINVAL.
+/// @param low The beginning of the degree range (inclusive). (0 <= low < MAX_DEGREE)
+/// @param high The end of the degree range (inclusive). (0 <= high < MAX_DEGREE)
+/// @param type The type of the access claimed. (ROT_READ or ROT_WRITE)
+/// @return Non-negative unique lock ID on success, -EINVAL on invalid argument.
 SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 {
-	int i;
+	int i; // Degree iteration variable
+	struct lock_info *lock; // Lock info to be added
+	int is_current_waiting_writer = 0; // Whether current task is in `waiting_writers`
+	DEFINE_WAIT(wait); // Wait for current task
 
-	/* Return -EINVAL if arguments are invalid */
+	/* Error handling: invalid argument */
 	if (low < 0 || low >= MAX_DEGREE || high < 0 || high >= MAX_DEGREE ||
 		(type != ROT_READ && type != ROT_WRITE)) {
 		return -EINVAL;
@@ -79,7 +89,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	locks_init();
 
 	/* Create a new lock */
-	struct lock_info *lock = kmalloc(sizeof(struct lock_info), GFP_KERNEL);
+	lock = kmalloc(sizeof(struct lock_info), GFP_KERNEL);
 	mutex_lock(&next_lock_id_mutex);
 	lock->id = next_lock_id++;
 	mutex_unlock(&next_lock_id_mutex);
@@ -90,9 +100,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	INIT_LIST_HEAD(&lock->list);
 
 	/* Add current task to wait queue */
-	DEFINE_WAIT(wait);
 	add_wait_queue(&requests, &wait);
-	int writer_waiting = 0; // Flag to keep track of whether `waiting_writers` is containing current process
 
 	/* Wait until the access meets readers-writer lock condition */
 	mutex_lock(&orientation_mutex);
@@ -100,10 +108,12 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	while (!lock_available(low, high, type)) {
 		mutex_unlock(&orientation_mutex);
 		mutex_unlock(&locks_mutex);
+
+		/* Change current task's state to `TASK_INTERRUPTIBLE` */
 		prepare_to_wait(&requests, &wait, TASK_INTERRUPTIBLE);
 
 		/* Increment the waiting_writers count */
-		if (type == ROT_WRITE && !writer_waiting) {
+		if (type == ROT_WRITE && !is_current_waiting_writer) {
 			mutex_lock(&locks_mutex);
 			for (i = low; i <= high; i++) {
 				if (i == MAX_DEGREE) {
@@ -111,10 +121,14 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 				}
 				locks[i].waiting_writers++;
 			}
-			writer_waiting = 1;
+			is_current_waiting_writer = 1;
 			mutex_unlock(&locks_mutex);
 		}
-		schedule(); // Go to sleep
+
+		/* Go to sleep */
+		schedule();
+
+		/* After wakeup, relock for condition check */
 		mutex_lock(&orientation_mutex);
 		mutex_lock(&locks_mutex);
 	}
@@ -126,14 +140,14 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	list_add(&lock->list, &locks_info);
 
 	/* Decrement the waiting_writers count */
-	if (writer_waiting) {
+	if (is_current_waiting_writer) {
 		for (i = low; i <= high; i++) {
 			if (i == MAX_DEGREE) {
 				i = 0;
 			}
 			locks[i].waiting_writers--;
 		}
-		writer_waiting = 0;
+		is_current_waiting_writer = 0;
 	}
 
 	/* Increment the active_readers or active_writers count */
@@ -150,6 +164,7 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 
 	mutex_unlock(&orientation_mutex);
 	mutex_unlock(&locks_mutex);
+
 	return lock->id;
 }
 
@@ -158,9 +173,9 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 /// @return On success, returns 0. On invalid argument, returns -EINVAL. On permission error, returns -EPERM.
 SYSCALL_DEFINE1(rotation_unlock, long, id)
 {
-	int i;
+	struct lock_info *lock; // Lock info to be deleted
 
-	/* Return -EINVAL if id is negative */
+	/* Error handling: negative lock ID */
 	if (id < 0) {
 		return -EINVAL;
 	}
@@ -168,15 +183,15 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 	mutex_lock(&locks_mutex);
 
 	/* Find the corresponding lock */
-	struct lock_info *lock = find_lock(id);
+	lock = find_lock(id);
 
-	/* Return -EINVAL if no such lock */
+	/* Error handling: invalid lock ID */
 	if (lock == NULL) {
 		mutex_unlock(&locks_mutex);
 		return -EINVAL;
 	}
 
-	/* Return -EPERM if the process doesn't own the lock */
+	/* Error handling: lock belongs to other task */
 	if (lock->pid != current->pid) {
 		mutex_unlock(&locks_mutex);
 		return -EPERM;
@@ -184,19 +199,13 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 
 	/* Delete the lock from holding lock list */
 	list_del(&lock->list);
-	for (i = lock->low; i <= lock->high; i++) {
-		if (i == MAX_DEGREE) {
-			i = 0;
-		}
-		if (lock->type == ROT_READ) {
-			locks[i].active_readers--;
-		} else {
-			locks[i].active_writers--;
-		}
-	}
+
+	/* Decrement the active_readers or active_writers count */
+	decrement_active_count(lock);
 
 	mutex_unlock(&locks_mutex);
 
+	/* Free memory AFTER RELEASING MUTEX */
 	kfree(lock);
 
 	/* Wake up all processes waiting for the lock */
@@ -207,11 +216,12 @@ SYSCALL_DEFINE1(rotation_unlock, long, id)
 
 void locks_init(void)
 {
-	int i;
+	int i; // Degree iteration variable
+
+	// Initalize `locks` only once
 	if (locks_initialized) {
 		return;
 	}
-
 	for (i = 0; i < MAX_DEGREE; i++) {
 		locks[i].active_readers = 0;
 		locks[i].active_writers = 0;
@@ -231,14 +241,14 @@ int orientation_in_range(int low, int high)
 
 int lock_available(int low, int high, int type)
 {
-	int i;
+	int i; // Degree iteration variable
 
 	if (!orientation_in_range(low, high)) {
 		return 0;
 	}
 
 	if (type == ROT_READ) {
-		/* Reader */
+		/* Reader: wait for active/waiting writers */
 		for (i = low; i <= high; i++) {
 			if (i == MAX_DEGREE) {
 				i = 0;
@@ -250,7 +260,7 @@ int lock_available(int low, int high, int type)
 		}
 		return 1;
 	} else {
-		/* Writer */
+		/* Writer: wait for active readers/writers */
 		for (i = low; i <= high; i++) {
 			if (i == MAX_DEGREE) {
 				i = 0;
@@ -266,6 +276,7 @@ int lock_available(int low, int high, int type)
 
 struct lock_info *find_lock(long id)
 {
+	/* Find corresponding lock in holding lock list */
 	struct lock_info *lock;
 	list_for_each_entry(lock, &locks_info, list) {
 		if (lock->id == id) {
@@ -277,47 +288,58 @@ struct lock_info *find_lock(long id)
 
 void exit_rotlock(struct task_struct *tsk)
 {
-	struct lock_info *lock;
+	struct lock_info *lock;// Lock list iteration variable
+	struct lock_info *before = NULL; // Lock list iteration variable
 	LIST_HEAD(garbage); // List of locks to be freed
+	struct list_head *node; // Garbage collection variable
+	struct lock_info *element; // Garbage collection variable
 
 	mutex_lock(&locks_mutex);
-	struct lock_info *before = NULL;
+
+	/* unlock all locks belonging to exiting thread */
 	list_for_each_entry(lock, &locks_info, list) {
 		if (lock->pid == tsk->pid) {
-			int i;
 			if (before != NULL) {
 				list_del(&before->list);
 				list_add(&before->list, &garbage);
 			}
+			decrement_active_count(lock);
 			before = lock;
-			for (i = lock->low; i <= lock->high; i++) {
-				if (i == MAX_DEGREE) {
-					i = 0;
-				}
-				if (lock->type == ROT_READ) {
-					locks[i].active_readers--;
-				} else {
-					locks[i].active_writers--;
-				}
-			}
 		}
 	}
 	if (before != NULL) {
 		list_del(&before->list);
 		list_add(&before->list, &garbage);
 	}
+
 	mutex_unlock(&locks_mutex);
+
+	/* Wake up all processes waiting for the lock */
 	wake_up_all(&requests);
 
 	/* Clean up garbage */
-	struct list_head *node;
-	struct lock_info *element;
 	while (!list_empty(&garbage)) {
 		node = garbage.next;
 		element = list_entry(node, struct lock_info, list);
 		list_del(node);
 		if (element != NULL) {
 			kfree(element);
+		}
+	}
+}
+
+void decrement_active_count(struct lock_info *lock) {
+	int i; // Degree iteration variable
+
+	/* Decrement the active_readers or active_writers count */
+	for (i = lock->low; i <= lock->high; i++) {
+		if (i == MAX_DEGREE) {
+			i = 0;
+		}
+		if (lock->type == ROT_READ) {
+			locks[i].active_readers--;
+		} else {
+			locks[i].active_writers--;
 		}
 	}
 }
