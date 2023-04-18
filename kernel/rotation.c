@@ -21,8 +21,9 @@ static DECLARE_WAIT_QUEUE_HEAD(requests); // Queue of requests
 
 /* Mutexes */
 static DEFINE_MUTEX(orientation_mutex); // Protect `orientation`
-static DEFINE_MUTEX(locks_mutex); // Protect `locks_info` and `locks`
+static DEFINE_MUTEX(initialized_mutex); // Protect `locks_initialized`
 static DEFINE_MUTEX(next_lock_id_mutex); // Protect `next_lock_id`
+static DEFINE_MUTEX(locks_mutex); // Protect `locks_info` and `locks`
 
 /// @brief Initialize `locks` if they haven't yet.
 void locks_init(void);
@@ -86,7 +87,11 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	}
 
 	/* Make sure the locks are initialized */
+	mutex_lock(&initialized_mutex);
+	mutex_lock(&locks_mutex);
 	locks_init();
+	mutex_unlock(&initialized_mutex);
+	mutex_unlock(&locks_mutex);
 
 	/* Create a new lock */
 	lock = kmalloc(sizeof(struct lock_info), GFP_KERNEL);

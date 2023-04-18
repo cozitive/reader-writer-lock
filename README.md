@@ -28,6 +28,8 @@ It represents numbers of readers and writers of each degree.
 - `device_orientation`: current device orientation
   - `orientation_mutex`: protects `device_orientation`
 - `locks_initialized`: `1` if initialized, else `0`
+  - `initialized_mutex`: protects `locks_initialized`
+
 - `next_lock_id`: next ID number to be allocated to new lock
   - `next_lock_id_mutex`: protects `next_lock_id`
 - `locks_info`: list of currently held locks' `lock_info`
@@ -94,7 +96,13 @@ long rotation_lock(int low, int high, int type);
 1. Check validity of input arguments.
    - If degree is out of range or type is invalid, return `-EINVAL`.
 2. Initialize `lock` array if not initialized.
-   - All counts are initialized by 0.
+   1. Lock `initialized_mutex`.
+   2. If already initialized, return.
+   3. Lock `locks_mutex`.
+   4. Set all counts of `locks` to 0.
+   5. Unlock `locks_mutex`.
+   6. Set `locks_initialized` to 1(mark as initialized).
+   7. Unlock `initialized_mutex`.
 3. Create a new `lock_info` struct.
    1. Lock `next_lock_id_mutex`.
    2. Allocate current `next_lock_id` to the new lock, and increment it.
@@ -229,7 +237,7 @@ In our early implementation, the cleanup function `exit_rotlock` is called in `S
 
 ### Shared Variable MUST BE PROTECTED BY MUTEX
 
-
+Mutex for `locks_initialized` is omitted first, since we overlooked possible race condition. However, not protecting `locks_initialized` can cause double initialization of `lock`, so the corresponding mutex is added.
 
 ### No Double Mutex Lock/Unlock
 
