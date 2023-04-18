@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 			perror("rotation_lock");
 			return EXIT_FAILURE;
 		}
-		fd = open("quiz", O_WRONLY | O_CREAT, 0644);
+		fd = open("quiz", O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, 0644);
 		if (fd < 0) {
 			perror("open");
 			cleanup();
