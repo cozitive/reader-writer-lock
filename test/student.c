@@ -76,11 +76,13 @@ int main(int argc, char *argv[]) {
 		}
 
 		char buf[30];
-		if (read(fd, buf, 30) < 0) {
+		ssize_t len;
+		if ((len = read(fd, buf, 30)) < 0) {
 			perror("read");
 			cleanup();
 			return EXIT_FAILURE;
 		}
+		buf[len] = 0; // maunal NULL-terminating
 
 		int num = 0;
 		sscanf(buf, "%d", &num);

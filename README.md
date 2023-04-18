@@ -242,3 +242,7 @@ Mutex for `locks_initialized` is omitted first, since we overlooked possible rac
 ### No Double Mutex Lock/Unlock
 
 When `mutex_lock` is called twice without unlock (and vice versa), Tizen kernel became stuck. Mutex lock/unlock should be located properly to prevent double lock/unlock.
+
+### `read()` Syscall Does Not NULL-Terminate
+
+`read()` just copies raw data from file to buffer, not NULL-terminating the buffer. In `student` test program, the read buffer should be manually NULL-terminated to dismiss the prior result.
