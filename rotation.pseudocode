@@ -1,0 +1,83 @@
+locks[360]; // 한 각도당 active_readers, active_writers, waiting_writers를 담고 있음
+list locks_info; // 현재 lock들의 정보를 담고 있는 리스트
+next_lock_id = 0; // 다음에 사용할 lock id
+orientation = 0; // 현재 orientation
+
+set_orientation(degree) {
+    orientation = degree;
+    wake_up_all();
+}
+
+rotation_lock(low, high, type) {
+    id = next_lock_id++;
+    writer_waiting = 0; // locks의 waiting_writers가 현재 프로세스를 반영중인지 나타내는 flag
+    while (!lock_available(low, high, type)) {
+        if (type == WRITE && !writer_waiting) {
+            /* Writer */
+            for (i = low ; i <= high ; i++) {
+                locks[i].waiting_writers++;
+            }
+            writer_waiting = 1;
+        }
+        wait();
+    }
+
+    /* Add the lock to the list */
+    list_insert(locks_info, id, pid, low, high, type);
+
+    /* Decrement the waiting_writers count */
+    if (writer_waiting) {
+        for (i = low ; i <= high ; i++) {
+            locks[i].waiting_writers--;
+        }
+    }
+
+    /* Increment the active_xxx count */
+    for (i = low ; i <= high; i++) {
+        if (type == READ) {
+            /* Reader */
+            locks[i].active_readers++;
+        } else {
+            /* Writer */
+            locks[i].active_writers++;
+        }
+    }
+
+    return id;
+}
+
+rotation_unlock(id) {
+    lock = find_lock(id); // locks_info에서 id에 해당하는 lock을 찾음
+    list_delete(locks_info, lock);
+    for (i = lock->low ; i <= lock->high ; i++) {
+        if (lock->type == READ) {
+            /* Reader */
+            locks[i].active_readers--;
+        } else {
+            /* Writer */
+            locks[i].active_writers--;
+        }
+    }
+    wake_up_all();
+}
+
+lock_available(low, high, type) {
+    if (!orientation_in_range(low, high)) return false;
+    if (type == READ) {
+        // Reader
+        for (i = low ; i <= high ; i++) {
+            if (locks[i].active_writers > 0 || locks[i].waiting_writers > 0) {
+                return false;
+            }
+        }
+        return true;
+    } else {
+        // Writer
+        for (i = low ; i <= high ; i++) {
+            if (locks[i].active_readers > 0 || locks[i].active_writers > 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+}

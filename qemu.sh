@@ -8,6 +8,9 @@
 # setup images in ./tizen-image.           #
 ############################################
 
+BASEDIR=$(dirname "$0")
+cd $BASEDIR
+
 exec qemu-system-aarch64           `# The QEMU system emulator `\
   -gdb tcp::1234                   `# Open a gdbserver on port 1234 for debugging `\
   -nographic                       `# We don't use the graphical environment `\
