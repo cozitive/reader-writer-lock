@@ -88,10 +88,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 
 	/* Make sure the locks are initialized */
 	mutex_lock(&initialized_mutex);
-	mutex_lock(&locks_mutex);
 	locks_init();
 	mutex_unlock(&initialized_mutex);
-	mutex_unlock(&locks_mutex);
 
 	/* Create a new lock */
 	lock = kmalloc(sizeof(struct lock_info), GFP_KERNEL);
@@ -111,8 +109,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 	mutex_lock(&orientation_mutex);
 	mutex_lock(&locks_mutex);
 	while (!lock_available(low, high, type)) {
-		mutex_unlock(&orientation_mutex);
 		mutex_unlock(&locks_mutex);
+		mutex_unlock(&orientation_mutex);
 
 		/* Change current task's state to `TASK_INTERRUPTIBLE` */
 		prepare_to_wait(&requests, &wait, TASK_INTERRUPTIBLE);
@@ -167,8 +165,8 @@ SYSCALL_DEFINE3(rotation_lock, int, low, int, high, int, type)
 		}
 	}
 
-	mutex_unlock(&orientation_mutex);
 	mutex_unlock(&locks_mutex);
+	mutex_unlock(&orientation_mutex);
 
 	return lock->id;
 }
@@ -227,11 +225,13 @@ void locks_init(void)
 	if (locks_initialized) {
 		return;
 	}
+	mutex_lock(&locks_mutex);
 	for (i = 0; i < MAX_DEGREE; i++) {
 		locks[i].active_readers = 0;
 		locks[i].active_writers = 0;
 		locks[i].waiting_writers = 0;
 	}
+	mutex_unlock(&locks_mutex);
 	locks_initialized = 1;
 }
 
