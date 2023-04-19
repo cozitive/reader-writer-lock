@@ -237,11 +237,11 @@ In our early implementation, the cleanup function `exit_rotlock` was called in `
 
 ### Shared Variable MUST BE PROTECTED BY MUTEX
 
-Mutex for `locks_initialized` was omitted first, since we overlooked possible race condition. However, not protecting `locks_initialized` can cause double initialization of `lock`, so we added the corresponding mutex.
+Mutex for `locks_initialized` was omitted at first, since we overlooked possible race conditions. However, not protecting `locks_initialized` can cause double initialization of `lock`, so we added the corresponding mutex.
 
 ### No Double Mutex Lock/Unlock
 
-When `mutex_lock` is called while the lock is already held by some thread (same for `mutex_unlock`), the kernel became stuck. Mutex lock/unlock should be located properly to prevent double lock/unlock.
+When `mutex_lock` is called while the lock is already being held by some thread (same for `mutex_unlock`), the kernel became stuck. Mutex lock/unlock should be located properly to prevent double lock/unlock.
 
 ### `read()` Syscall Does Not NULL-Terminate
 
