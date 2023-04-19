@@ -19,7 +19,7 @@ It contains information about the lock.
 
 It represents numbers of readers and writers of each degree.
 
-- `active_readers`: number of active readers
+- `active_readers`: Number of active readers
 - `active_writers`: Number of active writers
 - `waiting_writers`: Number of waiting writers
 
@@ -59,8 +59,8 @@ long set_orientation(int degree);
 
 #### Return Value
 
-- success: `0`
-- invalid argument: `-EINVAL`
+- Success: `0`
+- Invalid argument: `-EINVAL`
 
 #### Implementation
 
@@ -69,12 +69,12 @@ long set_orientation(int degree);
 2. Lock `orientation_mutex`.
 3. Set `device_orientation` to `degree`.
 4. Unlock `orientation_mutex`.
-5. Wake up all processes waiting for rotation lock acquire.
+5. Wake up all processes waiting to acquire rotation lock.
 6. Return 0.
 
 ### `rotation_lock` (#295)
 
-It requests a read or write access in the specified degree range.
+It requests read or write access in the specified degree range.
 
 ```c
 long rotation_lock(int low, int high, int type);
@@ -88,8 +88,8 @@ long rotation_lock(int low, int high, int type);
 
 #### Return Value
 
-- success: unique, non-negative lock ID
-- invalid argument: `-EINVAL`
+- Success: unique, non-negative lock ID
+- Invalid argument: `-EINVAL`
 
 #### Implementation
 
@@ -114,12 +114,12 @@ long rotation_lock(int low, int high, int type);
    2. Iterate the loop until the requested access becomes acceptable.
       1. Unock `orientation_mutex` and `locks_mutex`.
       2. Change current task's state to `TASK_INTERRUPTIBLE`.
-      3. If the requested access is write access, 
+      3. If the requested access is write access,
          1. Lock `locks_mutex`.
-         2. increment `waiting_writers` count of corresponding degrees.
+         2. Increment `waiting_writers` count of corresponding degrees.
          3. Unock `locks_mutex`.
       4. Call `schedule()` and go to sleep.
-      5. After wakeup, relock `orientation_mutex` and `locks_mutex` for condition check.
+      5. After wakeup, re-lock `orientation_mutex` and `locks_mutex` for condition check.
 6. Delete current task in the shared wait queue.
 7. Add new `lock_info` to the holding lock list(`locks_info`).
 8. If the requested access is write access, decrement `waiting_writers` count.
@@ -129,10 +129,10 @@ long rotation_lock(int low, int high, int type);
 
 #### Fairness Policy
 
-If degree range of waiting readers and waiting writers overlap, the readers must not access before the waiting writer.
+If degree range of waiting readers and waiting writers overlap, the readers must not gain the lock before the waiting writer.
 
-- read access should wait if active/waiting writer exists.
-- write access should wait if active reader/writer exists.
+- Read access request should wait if active/waiting writer exists.
+- Write access request should wait if active reader/writer exists.
 
 Access acceptance condition is checked in `lock_available()` helper function.
 
@@ -176,9 +176,9 @@ long rotation_unlock(long id);
 
 #### Return Value
 
-- success: `0`
-- invalid argument: `-EINVAL`
-- no permission: `-EPERM`
+- Success: `0`
+- Invalid argument: `-EINVAL`
+- No permission: `-EPERM`
 
 #### Implementation
 
@@ -198,11 +198,11 @@ long rotation_unlock(long id);
 
 ## Removing Requests at Process Termination
 
-If the process terminates with waiting or active access requests, the remaining requests should be removed. For cleanup, `exit_rotlock()` is called in `do_exit()`, a function called at process termination.
+If the process terminates while holding one or more locks, the locks should be released before it exits. To achieve this, `exit_rotlock()` is called in `do_exit()`, a function called at process termination.
 
 ### `exit_rotlock`
 
-It revokes all accesses created by the terminated process.
+It releases all locks the terminated process was holding.
 
 ```c
 void exit_rotlock(struct task_struct *tsk)
@@ -221,7 +221,7 @@ void exit_rotlock(struct task_struct *tsk)
    2. Add it to garbage collection list(`garbage`).
    3. Decrement `active_readers` or `active_writers` count.
 3. Unlock `locks_mutex`.
-4. Wake up all processes waiting for rotation lock acquire.
+4. Wake up all processes waiting to acquire rotation lock.
 5. Free all locks in the GC list.
    - `kfree()` should be called after releasing mutex to prevent deadlock.
 
@@ -233,15 +233,15 @@ Wait queue API can put a task in a wait queue(`add_wait_queue`), let the current
 
 ### Cleanup at Process Termination
 
-In our early implementation, the cleanup function `exit_rotlock` is called in `SIGINT` signal handler. The cleanup process worked well at our simple test, terminating the process by pressing `Ctrl+C`; however, if the process terminated by other factor, access requests of the processes remained in `locks_info` list. To resolve the problem, `exit_rotlock` call is moved into `do_exit` function.
+In our early implementation, the cleanup function `exit_rotlock` was called in `SIGINT` signal handler. The cleanup process worked well at our simple test, terminating the process by pressing `Ctrl+C`; however, if the process was terminated by other factor, access requests of the processes remained in `locks_info` list. To resolve the problem, `exit_rotlock` call was moved into `do_exit` function.
 
 ### Shared Variable MUST BE PROTECTED BY MUTEX
 
-Mutex for `locks_initialized` is omitted first, since we overlooked possible race condition. However, not protecting `locks_initialized` can cause double initialization of `lock`, so the corresponding mutex is added.
+Mutex for `locks_initialized` was omitted at first, since we overlooked possible race conditions. However, not protecting `locks_initialized` can cause double initialization of `lock`, so we added the corresponding mutex.
 
 ### No Double Mutex Lock/Unlock
 
-When `mutex_lock` is called twice without unlock (and vice versa), Tizen kernel became stuck. Mutex lock/unlock should be located properly to prevent double lock/unlock.
+When `mutex_lock` is called while the lock is already being held by some thread (same for `mutex_unlock`), the kernel became stuck. Mutex lock/unlock should be located properly to prevent double lock/unlock.
 
 ### `read()` Syscall Does Not NULL-Terminate
 
